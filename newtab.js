@@ -1,6 +1,6 @@
 const defaultSettings = {
   logo: {
-    text: 'via',
+    text: 'Vialike',
     fontSize: 64,
     fontFamily: "'Segoe UI', sans-serif",
     bold: false,
@@ -26,7 +26,7 @@ const defaultSettings = {
     blurIntensity: 10,
     showSearchArea: true,
     positionX: 50,
-    positionY: 50,
+    positionY: 25,
     showBookmarks: true
   }
 };
@@ -531,9 +531,9 @@ function setupEventListeners()
 
   document.getElementById('centerY').addEventListener('click', () =>
   {
-    currentSettings.advanced.positionY = 50;
-    document.getElementById('positionY').value = 50;
-    document.getElementById('positionYValue').textContent = '50%';
+    currentSettings.advanced.positionY = 25;
+    document.getElementById('positionY').value = 25;
+    document.getElementById('positionYValue').textContent = '25%';
     applySettings();
     saveSettings();
   });
