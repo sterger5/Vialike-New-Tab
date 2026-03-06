@@ -3,6 +3,11 @@
   "name": "Vialike New Tab",
   "version": "1.0.0",
   "description": "将新标签页替换为类似Via浏览器的主页面，支持丰富的定制化选项",
+  "icons": {
+    "16": "icons/icon16.svg",
+    "48": "icons/icon48.svg",
+    "128": "icons/icon128.svg"
+  },
   "chrome_url_overrides": {
     "newtab": "newtab.html"
   },
