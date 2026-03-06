@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Vialike New Tab",
+  "version": "1.0.0",
+  "description": "将新标签页替换为类似Via浏览器的主页面，支持丰富的定制化选项",
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  },
+  "permissions": ["storage", "bookmarks"],
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}
