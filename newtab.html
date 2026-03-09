@@ -23,6 +23,7 @@
             <path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
           </svg>
         </button>
+        <div class="search-suggestions" id="searchSuggestions"></div>
       </div>
     </div>
   </main>
@@ -179,6 +180,18 @@
               <option value="duckduckgo">DuckDuckGo</option>
               <option value="sogou">搜狗</option>
             </select>
+          </div>
+          <div class="setting-item">
+            <label>搜索推荐</label>
+            <div class="toggle-switch">
+              <input type="checkbox" id="showSuggestions" checked>
+              <label for="showSuggestions"></label>
+            </div>
+          </div>
+          <div class="setting-item">
+            <label>推荐行数</label>
+            <input type="range" id="suggestionRows" min="3" max="10" value="5">
+            <span class="range-value" id="suggestionRowsValue">5行</span>
           </div>
           <div class="setting-item">
             <label>快捷切换</label>

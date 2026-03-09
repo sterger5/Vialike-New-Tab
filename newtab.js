@@ -14,7 +14,9 @@ const defaultSettings = {
     borderOpacity: 20,
     showPlaceholder: true,
     textColor: '#333333',
-    searchEngine: 'google'
+    searchEngine: 'google',
+    showSuggestions: true,
+    suggestionRows: 5
   },
   background: {
     image: '',
@@ -250,6 +252,9 @@ function initUI()
   document.getElementById('textColor').value = currentSettings.searchbox.textColor;
   document.getElementById('textColorValue').textContent = currentSettings.searchbox.textColor;
   document.getElementById('searchEngine').value = currentSettings.searchbox.searchEngine || 'google';
+  document.getElementById('showSuggestions').checked = currentSettings.searchbox.showSuggestions !== false;
+  document.getElementById('suggestionRows').value = currentSettings.searchbox.suggestionRows || 5;
+  document.getElementById('suggestionRowsValue').textContent = (currentSettings.searchbox.suggestionRows || 5) + '行';
 
   document.querySelectorAll('.theme-btn').forEach(btn =>
   {
@@ -407,6 +412,19 @@ function setupEventListeners()
   document.getElementById('searchEngine').addEventListener('change', (e) =>
   {
     currentSettings.searchbox.searchEngine = e.target.value;
+    saveSettings();
+  });
+
+  document.getElementById('showSuggestions').addEventListener('change', (e) =>
+  {
+    currentSettings.searchbox.showSuggestions = e.target.checked;
+    saveSettings();
+  });
+
+  document.getElementById('suggestionRows').addEventListener('input', (e) =>
+  {
+    currentSettings.searchbox.suggestionRows = parseInt(e.target.value);
+    document.getElementById('suggestionRowsValue').textContent = e.target.value + '行';
     saveSettings();
   });
 
@@ -781,7 +799,244 @@ function setupEventListeners()
   {
     if (e.key === 'Enter')
     {
+      hideSuggestions();
       performSearch();
+    }
+  });
+
+  let suggestionTimeout = null;
+  let currentSuggestions = [];
+  let selectedSuggestionIndex = -1;
+
+  function hideSuggestions()
+  {
+    const suggestionsEl = document.getElementById('searchSuggestions');
+    suggestionsEl.classList.remove('visible');
+    suggestionsEl.innerHTML = '';
+    suggestionsEl.style.height = '';
+    suggestionsEl.style.overflowY = '';
+    currentSuggestions = [];
+    selectedSuggestionIndex = -1;
+  }
+
+  function showSuggestions(suggestions, query)
+  {
+    const suggestionsEl = document.getElementById('searchSuggestions');
+    const maxRows = currentSettings.searchbox.suggestionRows || 5;
+    const displaySuggestions = suggestions.slice(0, maxRows);
+    
+    if (displaySuggestions.length === 0)
+    {
+      hideSuggestions();
+      return;
+    }
+    
+    currentSuggestions = displaySuggestions;
+    selectedSuggestionIndex = -1;
+    
+    suggestionsEl.innerHTML = displaySuggestions.map((item, index) => `
+      <div class="suggestion-item" data-index="${index}">
+        <svg class="suggestion-icon" viewBox="0 0 24 24" width="16" height="16">
+          <path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        </svg>
+        <span class="suggestion-text">${highlightMatch(item, query)}</span>
+      </div>
+    `).join('');
+    
+    suggestionsEl.classList.add('visible');
+    
+    const itemHeight = 42;
+    const totalHeight = displaySuggestions.length * itemHeight;
+    const maxHeight = window.innerHeight - 200;
+    
+    if (totalHeight <= maxHeight)
+    {
+      suggestionsEl.style.height = 'auto';
+      suggestionsEl.style.overflowY = 'hidden';
+    }
+    else
+    {
+      suggestionsEl.style.height = maxHeight + 'px';
+      suggestionsEl.style.overflowY = 'auto';
+    }
+    
+    suggestionsEl.querySelectorAll('.suggestion-item').forEach(item =>
+    {
+      item.addEventListener('click', () =>
+      {
+        const index = parseInt(item.dataset.index);
+        searchBox.value = currentSuggestions[index];
+        hideSuggestions();
+        performSearch();
+      });
+    });
+  }
+
+  function highlightMatch(text, query)
+  {
+    if (!query) return text;
+    const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+    return text.replace(regex, '<mark>$1</mark>');
+  }
+
+  function escapeRegex(string)
+  {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  async function fetchSuggestions(query)
+  {
+    if (!query || !currentSettings.searchbox.showSuggestions)
+    {
+      hideSuggestions();
+      return;
+    }
+    
+    const engine = currentSettings.searchbox.searchEngine || 'google';
+    
+    try
+    {
+      let suggestions = [];
+      
+      if (engine === 'baidu')
+      {
+        const response = await fetch(`https://suggestion.baidu.com/su?wd=${encodeURIComponent(query)}&cb=callback`, {
+          mode: 'no-cors'
+        });
+        const script = document.createElement('script');
+        script.src = `https://suggestion.baidu.com/su?wd=${encodeURIComponent(query)}&cb=handleBaiduSuggestion`;
+        document.body.appendChild(script);
+        setTimeout(() => script.remove(), 1000);
+        return;
+      }
+      else if (engine === 'sogou')
+      {
+        const response = await fetch(`https://suggestion.sogou.com/sugg/ajaj_json.jsp?type=web&key=${encodeURIComponent(query)}`, {
+          mode: 'no-cors'
+        });
+        const script = document.createElement('script');
+        script.src = `https://suggestion.sogou.com/sugg/ajaj_json.jsp?type=web&key=${encodeURIComponent(query)}&callback=handleSogouSuggestion`;
+        document.body.appendChild(script);
+        setTimeout(() => script.remove(), 1000);
+        return;
+      }
+      else
+      {
+        const suggestUrl = engine === 'google' 
+          ? `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(query)}`
+          : engine === 'bing'
+          ? `https://api.bing.com/osjson.aspx?query=${encodeURIComponent(query)}`
+          : engine === 'duckduckgo'
+          ? `https://duckduckgo.com/ac/?q=${encodeURIComponent(query)}&type=list`
+          : null;
+        
+        if (suggestUrl)
+        {
+          const response = await fetch(suggestUrl);
+          const data = await response.json();
+          
+          if (engine === 'duckduckgo')
+          {
+            suggestions = data[1] || [];
+          }
+          else
+          {
+            suggestions = data[1] || [];
+          }
+        }
+      }
+      
+      showSuggestions(suggestions, query);
+    }
+    catch (error)
+    {
+      console.log('Failed to fetch suggestions:', error);
+    }
+  }
+
+  window.handleBaiduSuggestion = function(data)
+  {
+    if (data && data.s)
+    {
+      showSuggestions(data.s, searchBox.value.trim());
+    }
+  };
+
+  window.handleSogouSuggestion = function(data)
+  {
+    if (data && data[1])
+    {
+      showSuggestions(data[1], searchBox.value.trim());
+    }
+  };
+
+  searchBox.addEventListener('input', (e) =>
+  {
+    const query = e.target.value.trim();
+    
+    if (suggestionTimeout)
+    {
+      clearTimeout(suggestionTimeout);
+    }
+    
+    if (!query)
+    {
+      hideSuggestions();
+      return;
+    }
+    
+    suggestionTimeout = setTimeout(() =>
+    {
+      fetchSuggestions(query);
+    }, 200);
+  });
+
+  searchBox.addEventListener('keydown', (e) =>
+  {
+    const suggestionsEl = document.getElementById('searchSuggestions');
+    
+    if (!suggestionsEl.classList.contains('visible'))
+    {
+      return;
+    }
+    
+    if (e.key === 'ArrowDown')
+    {
+      e.preventDefault();
+      selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, currentSuggestions.length - 1);
+      updateSuggestionSelection();
+    }
+    else if (e.key === 'ArrowUp')
+    {
+      e.preventDefault();
+      selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, -1);
+      updateSuggestionSelection();
+    }
+    else if (e.key === 'Escape')
+    {
+      hideSuggestions();
+    }
+  });
+
+  function updateSuggestionSelection()
+  {
+    const items = document.querySelectorAll('.suggestion-item');
+    items.forEach((item, index) =>
+    {
+      item.classList.toggle('selected', index === selectedSuggestionIndex);
+    });
+    
+    if (selectedSuggestionIndex >= 0 && currentSuggestions[selectedSuggestionIndex])
+    {
+      searchBox.value = currentSuggestions[selectedSuggestionIndex];
+    }
+  }
+
+  document.addEventListener('click', (e) =>
+  {
+    if (!e.target.closest('.search-wrapper'))
+    {
+      hideSuggestions();
     }
   });
 
