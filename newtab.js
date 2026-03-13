@@ -306,6 +306,42 @@ function initUI()
   document.getElementById('positionYValue').textContent = currentSettings.advanced.positionY + '%';
 }
 
+function showToast(message)
+{
+  let toast = document.getElementById('generalToast');
+  if (!toast)
+  {
+    toast = document.createElement('div');
+    toast.id = 'generalToast';
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 80px;
+      right: 20px;
+      background: var(--modal-bg);
+      color: var(--text-color);
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      z-index: 2000;
+      font-size: 14px;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s ease;
+    `;
+    document.body.appendChild(toast);
+  }
+  
+  toast.textContent = message;
+  toast.style.opacity = '1';
+  toast.style.transform = 'translateY(0)';
+  
+  setTimeout(() =>
+  {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px)';
+  }, 2000);
+}
+
 function setupEventListeners()
 {
   const settingsBtn = document.getElementById('settingsBtn');
@@ -567,10 +603,6 @@ function setupEventListeners()
       
       if (source === 'bing' || source === 'wallhaven')
       {
-        document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentSettings.background.source = source;
-        saveSettings();
         openWallpaperSidebar(source);
       }
       else
@@ -714,6 +746,18 @@ function setupEventListeners()
     </div>
   `;
   document.body.appendChild(confirmModal);
+
+  document.getElementById('clearCache').addEventListener('click', () =>
+  {
+    wallpaperCache = {
+      bing: { wallpapers: [], lastUpdate: 0, currentPage: 0, hasMore: true },
+      wallhaven: { wallpapers: [], lastUpdate: 0, currentPage: 0, hasMore: true }
+    };
+    faviconCache = {};
+    saveWallpaperCache();
+    saveFaviconCache();
+    showToast('缓存已清除');
+  });
 
   document.getElementById('resetSettings').addEventListener('click', () =>
   {
@@ -895,42 +939,6 @@ function setupEventListeners()
     }
     
     toast.textContent = `搜索引擎已切换为: ${engineName}`;
-    toast.style.opacity = '1';
-    toast.style.transform = 'translateY(0)';
-    
-    setTimeout(() =>
-    {
-      toast.style.opacity = '0';
-      toast.style.transform = 'translateY(10px)';
-    }, 2000);
-  }
-
-  function showToast(message)
-  {
-    let toast = document.getElementById('generalToast');
-    if (!toast)
-    {
-      toast = document.createElement('div');
-      toast.id = 'generalToast';
-      toast.style.cssText = `
-        position: fixed;
-        bottom: 80px;
-        right: 20px;
-        background: var(--modal-bg);
-        color: var(--text-color);
-        padding: 12px 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        z-index: 2000;
-        font-size: 14px;
-        opacity: 0;
-        transform: translateY(10px);
-        transition: all 0.3s ease;
-      `;
-      document.body.appendChild(toast);
-    }
-    
-    toast.textContent = message;
     toast.style.opacity = '1';
     toast.style.transform = 'translateY(0)';
     
@@ -1204,6 +1212,112 @@ function setupEventListeners()
 
 let faviconCache = {};
 const DEFAULT_ICON_DATA = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#666"><circle cx="12" cy="12" r="10" fill="none" stroke="#666" stroke-width="2"/><path d="M12 6v6l4 2" fill="none" stroke="#666" stroke-width="2" stroke-linecap="round"/></svg>');
+
+let wallpaperCache = {
+  bing: {
+    wallpapers: [],
+    lastUpdate: 0,
+    currentPage: 0,
+    hasMore: true
+  },
+  wallhaven: {
+    wallpapers: [],
+    lastUpdate: 0,
+    currentPage: 0,
+    hasMore: true
+  }
+};
+
+const CACHE_EXPIRE_TIME = 7 * 24 * 60 * 60 * 1000;
+let isLoadingWallpapers = false;
+let sidebarScrollHandler = null;
+let currentScrollSource = null;
+
+function loadWallpaperCache()
+{
+  return new Promise((resolve) =>
+  {
+    if (typeof chrome !== 'undefined' && chrome.storage)
+    {
+      chrome.storage.local.get(['wallpaperCache'], (result) =>
+      {
+        if (result.wallpaperCache)
+        {
+          wallpaperCache = {
+            bing: {
+              wallpapers: result.wallpaperCache.bing?.wallpapers || [],
+              lastUpdate: result.wallpaperCache.bing?.lastUpdate || 0,
+              currentPage: result.wallpaperCache.bing?.currentPage || 0,
+              hasMore: result.wallpaperCache.bing?.hasMore !== undefined ? result.wallpaperCache.bing.hasMore : true
+            },
+            wallhaven: {
+              wallpapers: result.wallpaperCache.wallhaven?.wallpapers || [],
+              lastUpdate: result.wallpaperCache.wallhaven?.lastUpdate || 0,
+              currentPage: result.wallpaperCache.wallhaven?.currentPage || 0,
+              hasMore: result.wallpaperCache.wallhaven?.hasMore !== undefined ? result.wallpaperCache.wallhaven.hasMore : true
+            }
+          };
+        }
+        resolve();
+      });
+    }
+    else
+    {
+      const saved = localStorage.getItem('wallpaperCache');
+      if (saved)
+      {
+        try
+        {
+          const parsed = JSON.parse(saved);
+          wallpaperCache = {
+            bing: {
+              wallpapers: parsed.bing?.wallpapers || [],
+              lastUpdate: parsed.bing?.lastUpdate || 0,
+              currentPage: parsed.bing?.currentPage || 0,
+              hasMore: parsed.bing?.hasMore !== undefined ? parsed.bing.hasMore : true
+            },
+            wallhaven: {
+              wallpapers: parsed.wallhaven?.wallpapers || [],
+              lastUpdate: parsed.wallhaven?.lastUpdate || 0,
+              currentPage: parsed.wallhaven?.currentPage || 0,
+              hasMore: parsed.wallhaven?.hasMore !== undefined ? parsed.wallhaven.hasMore : true
+            }
+          };
+        }
+        catch (e)
+        {
+          wallpaperCache = {
+            bing: { wallpapers: [], lastUpdate: 0, currentPage: 0, hasMore: true },
+            wallhaven: { wallpapers: [], lastUpdate: 0, currentPage: 0, hasMore: true }
+          };
+        }
+      }
+      resolve();
+    }
+  });
+}
+
+function saveWallpaperCache()
+{
+  if (typeof chrome !== 'undefined' && chrome.storage)
+  {
+    chrome.storage.local.set({ wallpaperCache: wallpaperCache });
+  }
+  else
+  {
+    localStorage.setItem('wallpaperCache', JSON.stringify(wallpaperCache));
+  }
+}
+
+function isWallpaperCacheExpired(source)
+{
+  const cache = wallpaperCache[source];
+  if (!cache || !cache.lastUpdate || cache.wallpapers.length === 0)
+  {
+    return true;
+  }
+  return Date.now() - cache.lastUpdate > CACHE_EXPIRE_TIME;
+}
 
 function loadFaviconCache()
 {
@@ -1491,6 +1605,7 @@ async function init()
 {
   await loadSettings();
   await loadFaviconCache();
+  await loadWallpaperCache();
   initUI();
   applySettings();
   loadBookmarks();
@@ -1505,11 +1620,16 @@ async function init()
 
 function updateWallpaperSourceUI(source)
 {
-  const localSection = document.getElementById('localImageSection');
+  const uploadBtn = document.getElementById('uploadBgBtn');
+  const clearBtn = document.getElementById('clearBgBtn');
   
-  if (localSection)
+  if (uploadBtn)
   {
-    localSection.style.display = source === 'local' ? 'block' : 'none';
+    uploadBtn.style.display = source === 'local' ? 'inline-flex' : 'none';
+  }
+  if (clearBtn)
+  {
+    clearBtn.style.display = source === 'local' ? 'inline-flex' : 'none';
   }
 }
 
@@ -1563,124 +1683,242 @@ function closeWallpaperSidebar()
   {
     sidebarOverlay.classList.remove('active');
   }
+  
+  if (sidebarScrollHandler)
+  {
+    const gallery = document.getElementById('sidebarGallery');
+    if (gallery)
+    {
+      gallery.removeEventListener('scroll', sidebarScrollHandler);
+    }
+    sidebarScrollHandler = null;
+  }
 }
 
-function loadSidebarWallpapers(source)
+function loadSidebarWallpapers(source, forceRefresh = false)
 {
   const container = document.getElementById('sidebarWallpapers');
   const refreshBtn = document.getElementById('sidebarRefresh');
   
   if (!container) return;
   
+  if (forceRefresh)
+  {
+    wallpaperCache[source].wallpapers = [];
+    wallpaperCache[source].currentPage = 0;
+    wallpaperCache[source].hasMore = true;
+    wallpaperCache[source].lastUpdate = Date.now();
+    saveWallpaperCache();
+  }
+  
+  if (wallpaperCache[source].wallpapers.length > 0)
+  {
+    renderSidebarWallpaperGrid(container, wallpaperCache[source].wallpapers, source, false);
+    if (source === 'wallhaven')
+    {
+      setupInfiniteScroll(source);
+    }
+    return;
+  }
+  
   refreshBtn.classList.add('loading');
   container.innerHTML = '<div class="wallpaper-loading-text">加载中...</div>';
   
   if (source === 'bing')
   {
-    loadBingWallpapersForSidebar(container, refreshBtn);
+    loadBingWallpapersForSidebar(container, refreshBtn, 1);
   }
   else
   {
-    loadWallhavenWallpapersForSidebar(container, refreshBtn);
+    loadWallhavenWallpapersForSidebar(container, refreshBtn, 1);
   }
 }
 
-async function loadBingWallpapersForSidebar(container, refreshBtn)
+async function loadBingWallpapersForSidebar(container, refreshBtn, page = 1)
 {
+  if (isLoadingWallpapers) return;
+  isLoadingWallpapers = true;
+  
   try
   {
-    const response = await fetch('https://bing.biturl.top/?resolution=1920&format=json&index=0&mkt=zh-CN');
-    const data = await response.json();
+    const wallpapers = [];
+    const existingUrls = new Set(wallpaperCache.bing.wallpapers.map(w => w.url));
     
-    if (data && data.url)
+    for (let i = 0; i < 16; i++)
     {
-      const wallpapers = [];
-      for (let i = 0; i < 8; i++)
+      try
       {
-        try
+        const response = await fetch(`https://bing.biturl.top/?resolution=1920&format=json&index=${i}&mkt=zh-CN`);
+        const data = await response.json();
+        if (data && data.url && !existingUrls.has(data.url))
         {
-          const dayResponse = await fetch(`https://bing.biturl.top/?resolution=1920&format=json&index=${i}&mkt=zh-CN`);
-          const dayData = await dayResponse.json();
-          if (dayData && dayData.url)
-          {
-            wallpapers.push({
-              url: dayData.url,
-              title: dayData.copyright || `必应壁纸 ${i + 1}`,
-              source: 'bing'
-            });
-          }
-        }
-        catch (e)
-        {
-          break;
+          wallpapers.push({
+            url: data.url,
+            title: data.copyright || `必应壁纸 ${i + 1}`,
+            source: 'bing'
+          });
+          existingUrls.add(data.url);
         }
       }
-      
-      if (wallpapers.length === 0)
+      catch (e)
       {
-        wallpapers.push({
-          url: data.url,
-          title: data.copyright || '必应每日壁纸',
-          source: 'bing'
-        });
+        continue;
       }
+    }
+    
+    if (wallpapers.length > 0)
+    {
+      wallpaperCache.bing.wallpapers = wallpapers;
+      wallpaperCache.bing.currentPage = 1;
+      wallpaperCache.bing.hasMore = false;
+      wallpaperCache.bing.lastUpdate = Date.now();
+      saveWallpaperCache();
       
-      renderSidebarWallpaperGrid(container, wallpapers, 'bing');
+      container.innerHTML = '';
+      renderSidebarWallpaperGrid(container, wallpapers, 'bing', false);
+    }
+    else if (wallpaperCache.bing.wallpapers.length > 0)
+    {
+      renderSidebarWallpaperGrid(container, wallpaperCache.bing.wallpapers, 'bing', false);
+    }
+    else
+    {
+      container.innerHTML = '<div class="wallpaper-error">加载失败，请检查网络连接</div>';
     }
   }
   catch (error)
   {
-    container.innerHTML = '<div class="wallpaper-error">加载失败，请检查网络连接</div>';
+    if (wallpaperCache.bing.wallpapers.length > 0)
+    {
+      renderSidebarWallpaperGrid(container, wallpaperCache.bing.wallpapers, 'bing', false);
+    }
+    else
+    {
+      container.innerHTML = '<div class="wallpaper-error">加载失败，请检查网络连接</div>';
+    }
   }
   finally
   {
+    isLoadingWallpapers = false;
     refreshBtn.classList.remove('loading');
   }
 }
 
-async function loadWallhavenWallpapersForSidebar(container, refreshBtn)
+async function loadWallhavenWallpapersForSidebar(container, refreshBtn, page = 1)
 {
+  if (isLoadingWallpapers) return;
+  isLoadingWallpapers = true;
+  
   try
   {
-    const response = await fetch('https://wallhaven.cc/api/v1/search?categories=111&purity=100&topRange=1d&sorting=toplist&page=1');
+    const response = await fetch(`https://wallhaven.cc/api/v1/search?categories=111&purity=100&topRange=1d&sorting=toplist&page=${page}`);
     const data = await response.json();
     
     if (data && data.data && data.data.length > 0)
     {
-      const wallpapers = data.data.slice(0, 12).map(item => ({
+      const wallpapers = data.data.map(item => ({
         url: item.path,
         thumb: item.thumbs?.small || item.path,
         title: item.id || 'Wallhaven壁纸',
         source: 'wallhaven'
       }));
       
-      renderSidebarWallpaperGrid(container, wallpapers, 'wallhaven');
+      if (page === 1)
+      {
+        wallpaperCache.wallhaven.wallpapers = wallpapers;
+        container.innerHTML = '';
+      }
+      else
+      {
+        wallpaperCache.wallhaven.wallpapers = [...wallpaperCache.wallhaven.wallpapers, ...wallpapers];
+      }
+      
+      wallpaperCache.wallhaven.currentPage = page;
+      
+      if (data.meta)
+      {
+        wallpaperCache.wallhaven.hasMore = data.meta.current_page < data.meta.last_page;
+      }
+      else
+      {
+        wallpaperCache.wallhaven.hasMore = data.data.length > 0;
+      }
+      
+      wallpaperCache.wallhaven.lastUpdate = Date.now();
+      saveWallpaperCache();
+      
+      renderSidebarWallpaperGrid(container, wallpapers, 'wallhaven', page > 1);
+      
+      if (page === 1)
+      {
+        setupInfiniteScroll('wallhaven');
+      }
+    }
+    else if (page === 1)
+    {
+      if (wallpaperCache.wallhaven.wallpapers.length > 0)
+      {
+        renderSidebarWallpaperGrid(container, wallpaperCache.wallhaven.wallpapers, 'wallhaven', false);
+        setupInfiniteScroll('wallhaven');
+      }
+      else
+      {
+        container.innerHTML = '<div class="wallpaper-error">暂无壁纸数据</div>';
+      }
     }
     else
     {
-      container.innerHTML = '<div class="wallpaper-error">暂无壁纸数据</div>';
+      wallpaperCache.wallhaven.hasMore = false;
+      saveWallpaperCache();
     }
   }
   catch (error)
   {
-    container.innerHTML = '<div class="wallpaper-error">加载失败，请检查网络连接</div>';
+    if (page === 1)
+    {
+      if (wallpaperCache.wallhaven.wallpapers.length > 0)
+      {
+        renderSidebarWallpaperGrid(container, wallpaperCache.wallhaven.wallpapers, 'wallhaven', false);
+        setupInfiniteScroll('wallhaven');
+      }
+      else
+      {
+        container.innerHTML = '<div class="wallpaper-error">加载失败，请检查网络连接</div>';
+      }
+    }
   }
   finally
   {
+    isLoadingWallpapers = false;
     refreshBtn.classList.remove('loading');
   }
 }
 
-function renderSidebarWallpaperGrid(container, wallpapers, source)
+function renderSidebarWallpaperGrid(container, wallpapers, source, append = false)
 {
-  container.innerHTML = wallpapers.map((wp, index) => `
+  const html = wallpapers.map((wp, index) => `
     <div class="wallpaper-item" data-url="${wp.url}" data-index="${index}">
       <img src="${wp.thumb || wp.url}" alt="${wp.title}" loading="lazy">
     </div>
   `).join('');
   
-  container.querySelectorAll('.wallpaper-item').forEach(item =>
+  if (append)
   {
+    const loadingEl = container.querySelector('.wallpaper-loading-more');
+    if (loadingEl)
+    {
+      loadingEl.remove();
+    }
+    container.insertAdjacentHTML('beforeend', html);
+  }
+  else
+  {
+    container.innerHTML = html;
+  }
+  
+  container.querySelectorAll('.wallpaper-item:not([data-bound])').forEach(item =>
+  {
+    item.setAttribute('data-bound', 'true');
     item.addEventListener('click', () =>
     {
       const url = item.dataset.url;
@@ -1689,10 +1927,77 @@ function renderSidebarWallpaperGrid(container, wallpapers, source)
       applySettings();
       saveSettings();
       
+      document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+      const sourceBtn = document.querySelector(`.source-btn[data-source="${source}"]`);
+      if (sourceBtn)
+      {
+        sourceBtn.classList.add('active');
+      }
+      updateWallpaperSourceUI(source);
+      
       container.querySelectorAll('.wallpaper-item').forEach(i => i.classList.remove('selected'));
       item.classList.add('selected');
     });
   });
+}
+
+function setupInfiniteScroll(source)
+{
+  const gallery = document.getElementById('sidebarGallery');
+  
+  currentScrollSource = source;
+  
+  if (sidebarScrollHandler)
+  {
+    gallery.removeEventListener('scroll', sidebarScrollHandler);
+  }
+  
+  sidebarScrollHandler = () =>
+  {
+    const cache = wallpaperCache[currentScrollSource];
+    if (isLoadingWallpapers || !cache || !cache.hasMore)
+    {
+      return;
+    }
+    
+    const { scrollHeight, scrollTop, clientHeight } = gallery;
+    const scrollBottom = scrollHeight - scrollTop - clientHeight;
+    
+    if (scrollBottom < 300)
+    {
+      preloadNextPage(currentScrollSource);
+    }
+  };
+  
+  gallery.addEventListener('scroll', sidebarScrollHandler);
+}
+
+function preloadNextPage(source)
+{
+  if (isLoadingWallpapers || !wallpaperCache[source].hasMore)
+  {
+    return;
+  }
+  
+  isLoadingWallpapers = true;
+  
+  const container = document.getElementById('sidebarWallpapers');
+  const refreshBtn = document.getElementById('sidebarRefresh');
+  const nextPage = wallpaperCache[source].currentPage + 1;
+  
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'wallpaper-loading-more';
+  loadingEl.innerHTML = '<span>加载更多...</span>';
+  container.appendChild(loadingEl);
+  
+  if (source === 'bing')
+  {
+    loadBingWallpapersForSidebar(container, refreshBtn, nextPage);
+  }
+  else
+  {
+    loadWallhavenWallpapersForSidebar(container, refreshBtn, nextPage);
+  }
 }
 
 function setupSidebarEvents()
@@ -1709,7 +2014,7 @@ function setupSidebarEvents()
   {
     sidebarRefresh.addEventListener('click', () =>
     {
-      loadSidebarWallpapers(currentSidebarSource);
+      loadSidebarWallpapers(currentSidebarSource, true);
     });
   }
   

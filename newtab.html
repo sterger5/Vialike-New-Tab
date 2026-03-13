@@ -172,6 +172,18 @@
               <span class="color-value" id="textColorValue">#333333</span>
             </div>
           </div>
+          <div class="setting-item">
+            <label>搜索框效果</label>
+            <div class="effect-options">
+              <button class="effect-btn active" data-effect="transparent">透明</button>
+              <button class="effect-btn" data-effect="blur">模糊</button>
+            </div>
+          </div>
+          <div class="setting-item blur-intensity-setting" id="blurIntensitySetting">
+            <label>模糊强度</label>
+            <input type="range" id="blurIntensity" min="1" max="30" value="10">
+            <span class="range-value" id="blurIntensityValue">10px</span>
+          </div>
         </div>
 
         <div class="tab-content" id="background-tab">
@@ -183,7 +195,7 @@
               <button class="source-btn" data-source="wallhaven">Wallhaven</button>
             </div>
           </div>
-          <div class="setting-item" id="localImageSection">
+          <div class="setting-item">
             <label>背景图片</label>
             <div class="image-upload">
               <button class="save-local-btn" id="saveLocalBtn" title="保存当前壁纸到本地">
@@ -249,18 +261,6 @@
             </div>
           </div>
           <div class="setting-item">
-            <label>搜索框效果</label>
-            <div class="effect-options">
-              <button class="effect-btn active" data-effect="transparent">透明</button>
-              <button class="effect-btn" data-effect="blur">模糊</button>
-            </div>
-          </div>
-          <div class="setting-item blur-intensity-setting" id="blurIntensitySetting">
-            <label>模糊强度</label>
-            <input type="range" id="blurIntensity" min="1" max="30" value="10">
-            <span class="range-value" id="blurIntensityValue">10px</span>
-          </div>
-          <div class="setting-item">
             <label>搜索区域</label>
             <div class="toggle-switch">
               <input type="checkbox" id="showSearchArea" checked>
@@ -283,6 +283,10 @@
               <button class="center-btn" id="centerX">横向居中</button>
               <button class="center-btn" id="centerY">纵向默认</button>
             </div>
+          </div>
+          <div class="setting-item">
+            <label>清除缓存</label>
+            <button class="reset-btn" id="clearCache">清除壁纸缓存</button>
           </div>
           <div class="setting-item">
             <label>恢复默认</label>

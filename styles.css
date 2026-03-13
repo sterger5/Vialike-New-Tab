@@ -1138,3 +1138,33 @@ body {
   opacity: 1;
   visibility: visible;
 }
+
+.wallpaper-loading-more {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.wallpaper-loading-more span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wallpaper-loading-more span::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--text-secondary);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
