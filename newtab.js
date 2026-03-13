@@ -21,7 +21,8 @@ const defaultSettings = {
   background: {
     image: '',
     theme: 'light',
-    opacity: 100
+    blur: 0,
+    source: 'local'
   },
   advanced: {
     effect: 'transparent',
@@ -125,6 +126,7 @@ function applySettings()
   const searchArea = document.querySelector('.search-area');
   const bookmarksBar = document.getElementById('bookmarksBar');
   const body = document.body;
+  const backgroundLayer = document.getElementById('backgroundLayer');
 
   logo.textContent = currentSettings.logo.text;
   logo.style.fontSize = currentSettings.logo.fontSize + 'px';
@@ -172,18 +174,29 @@ function applySettings()
 
   if (currentSettings.background.image)
   {
-    body.style.backgroundImage = `url(${currentSettings.background.image})`;
+    backgroundLayer.style.backgroundImage = `url(${currentSettings.background.image})`;
+    body.style.backgroundImage = 'none';
   }
   else
   {
+    backgroundLayer.style.backgroundImage = 'none';
     body.style.backgroundImage = 'none';
   }
 
   body.setAttribute('data-theme', currentSettings.background.theme);
-  body.style.setProperty('--bg-opacity', currentSettings.background.opacity / 100);
 
-  const overlay = document.querySelector('.background-overlay');
-  overlay.style.opacity = currentSettings.background.opacity / 100;
+  const blurValue = currentSettings.background.blur || 0;
+  
+  if (currentSettings.background.image && blurValue > 0)
+  {
+    backgroundLayer.style.filter = `blur(${blurValue}px)`;
+    backgroundLayer.style.webkitFilter = `blur(${blurValue}px)`;
+  }
+  else
+  {
+    backgroundLayer.style.filter = 'none';
+    backgroundLayer.style.webkitFilter = 'none';
+  }
 
   if (currentSettings.advanced.effect === 'blur')
   {
@@ -260,8 +273,15 @@ function initUI()
   {
     btn.classList.toggle('active', btn.dataset.theme === currentSettings.background.theme);
   });
-  document.getElementById('bgOpacity').value = currentSettings.background.opacity;
-  document.getElementById('bgOpacityValue').textContent = currentSettings.background.opacity + '%';
+  document.getElementById('bgBlur').value = currentSettings.background.blur || 0;
+  document.getElementById('bgBlurValue').textContent = (currentSettings.background.blur || 0) + 'px';
+  
+  document.querySelectorAll('.source-btn').forEach(btn =>
+  {
+    btn.classList.toggle('active', btn.dataset.source === (currentSettings.background.source || 'local'));
+  });
+  
+  updateWallpaperSourceUI(currentSettings.background.source || 'local');
 
   document.querySelectorAll('.effect-btn').forEach(btn =>
   {
@@ -473,12 +493,37 @@ function setupEventListeners()
     });
   });
 
-  document.getElementById('bgOpacity').addEventListener('input', (e) =>
+  document.getElementById('bgBlur').addEventListener('input', (e) =>
   {
-    currentSettings.background.opacity = parseInt(e.target.value);
-    document.getElementById('bgOpacityValue').textContent = e.target.value + '%';
+    currentSettings.background.blur = parseInt(e.target.value);
+    document.getElementById('bgBlurValue').textContent = e.target.value + 'px';
     applySettings();
     saveSettings();
+  });
+
+  document.querySelectorAll('.source-btn').forEach(btn =>
+  {
+    btn.addEventListener('click', () =>
+    {
+      const source = btn.dataset.source;
+      
+      if (source === 'bing' || source === 'wallhaven')
+      {
+        document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSettings.background.source = source;
+        saveSettings();
+        openWallpaperSidebar(source);
+      }
+      else
+      {
+        document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSettings.background.source = source;
+        updateWallpaperSourceUI(source);
+        saveSettings();
+      }
+    });
   });
 
   document.querySelectorAll('.effect-btn').forEach(btn =>
@@ -1349,11 +1394,252 @@ async function init()
   applySettings();
   loadBookmarks();
   setupEventListeners();
+  setupSidebarEvents();
 
   setTimeout(() =>
   {
     document.getElementById('searchBox').focus();
   }, 100);
+}
+
+function updateWallpaperSourceUI(source)
+{
+  const localSection = document.getElementById('localImageSection');
+  
+  if (localSection)
+  {
+    localSection.style.display = source === 'local' ? 'block' : 'none';
+  }
+}
+
+let sidebarOverlay = null;
+let currentSidebarSource = 'bing';
+
+function createSidebarOverlay()
+{
+  if (!sidebarOverlay)
+  {
+    sidebarOverlay = document.createElement('div');
+    sidebarOverlay.className = 'sidebar-overlay';
+    sidebarOverlay.id = 'sidebarOverlay';
+    document.body.appendChild(sidebarOverlay);
+    
+    sidebarOverlay.addEventListener('click', closeWallpaperSidebar);
+  }
+}
+
+function openWallpaperSidebar(source)
+{
+  createSidebarOverlay();
+  
+  const sidebar = document.getElementById('wallpaperSidebar');
+  const sidebarTitle = document.getElementById('sidebarTitle');
+  
+  currentSidebarSource = source;
+  sidebarTitle.textContent = source === 'bing' ? '必应壁纸' : 'Wallhaven';
+  
+  document.querySelectorAll('.sidebar-source-btn').forEach(btn =>
+  {
+    btn.classList.toggle('active', btn.dataset.source === source);
+  });
+  
+  sidebar.classList.add('active');
+  sidebarOverlay.classList.add('active');
+  
+  loadSidebarWallpapers(source);
+}
+
+function closeWallpaperSidebar()
+{
+  const sidebar = document.getElementById('wallpaperSidebar');
+  
+  if (sidebar)
+  {
+    sidebar.classList.remove('active');
+  }
+  
+  if (sidebarOverlay)
+  {
+    sidebarOverlay.classList.remove('active');
+  }
+}
+
+function loadSidebarWallpapers(source)
+{
+  const container = document.getElementById('sidebarWallpapers');
+  const refreshBtn = document.getElementById('sidebarRefresh');
+  
+  if (!container) return;
+  
+  refreshBtn.classList.add('loading');
+  container.innerHTML = '<div class="wallpaper-loading-text">加载中...</div>';
+  
+  if (source === 'bing')
+  {
+    loadBingWallpapersForSidebar(container, refreshBtn);
+  }
+  else
+  {
+    loadWallhavenWallpapersForSidebar(container, refreshBtn);
+  }
+}
+
+async function loadBingWallpapersForSidebar(container, refreshBtn)
+{
+  try
+  {
+    const response = await fetch('https://bing.biturl.top/?resolution=1920&format=json&index=0&mkt=zh-CN');
+    const data = await response.json();
+    
+    if (data && data.url)
+    {
+      const wallpapers = [];
+      for (let i = 0; i < 8; i++)
+      {
+        try
+        {
+          const dayResponse = await fetch(`https://bing.biturl.top/?resolution=1920&format=json&index=${i}&mkt=zh-CN`);
+          const dayData = await dayResponse.json();
+          if (dayData && dayData.url)
+          {
+            wallpapers.push({
+              url: dayData.url,
+              title: dayData.copyright || `必应壁纸 ${i + 1}`,
+              source: 'bing'
+            });
+          }
+        }
+        catch (e)
+        {
+          break;
+        }
+      }
+      
+      if (wallpapers.length === 0)
+      {
+        wallpapers.push({
+          url: data.url,
+          title: data.copyright || '必应每日壁纸',
+          source: 'bing'
+        });
+      }
+      
+      renderSidebarWallpaperGrid(container, wallpapers, 'bing');
+    }
+  }
+  catch (error)
+  {
+    container.innerHTML = '<div class="wallpaper-error">加载失败，请检查网络连接</div>';
+  }
+  finally
+  {
+    refreshBtn.classList.remove('loading');
+  }
+}
+
+async function loadWallhavenWallpapersForSidebar(container, refreshBtn)
+{
+  try
+  {
+    const response = await fetch('https://wallhaven.cc/api/v1/search?categories=111&purity=100&topRange=1d&sorting=toplist&page=1');
+    const data = await response.json();
+    
+    if (data && data.data && data.data.length > 0)
+    {
+      const wallpapers = data.data.slice(0, 12).map(item => ({
+        url: item.path,
+        thumb: item.thumbs?.small || item.path,
+        title: item.id || 'Wallhaven壁纸',
+        source: 'wallhaven'
+      }));
+      
+      renderSidebarWallpaperGrid(container, wallpapers, 'wallhaven');
+    }
+    else
+    {
+      container.innerHTML = '<div class="wallpaper-error">暂无壁纸数据</div>';
+    }
+  }
+  catch (error)
+  {
+    container.innerHTML = '<div class="wallpaper-error">加载失败，请检查网络连接</div>';
+  }
+  finally
+  {
+    refreshBtn.classList.remove('loading');
+  }
+}
+
+function renderSidebarWallpaperGrid(container, wallpapers, source)
+{
+  container.innerHTML = wallpapers.map((wp, index) => `
+    <div class="wallpaper-item" data-url="${wp.url}" data-index="${index}">
+      <img src="${wp.thumb || wp.url}" alt="${wp.title}" loading="lazy">
+    </div>
+  `).join('');
+  
+  container.querySelectorAll('.wallpaper-item').forEach(item =>
+  {
+    item.addEventListener('click', () =>
+    {
+      const url = item.dataset.url;
+      currentSettings.background.image = url;
+      currentSettings.background.source = source;
+      applySettings();
+      saveSettings();
+      
+      container.querySelectorAll('.wallpaper-item').forEach(i => i.classList.remove('selected'));
+      item.classList.add('selected');
+    });
+  });
+}
+
+function setupSidebarEvents()
+{
+  const sidebarClose = document.getElementById('sidebarClose');
+  const sidebarRefresh = document.getElementById('sidebarRefresh');
+  
+  if (sidebarClose)
+  {
+    sidebarClose.addEventListener('click', closeWallpaperSidebar);
+  }
+  
+  if (sidebarRefresh)
+  {
+    sidebarRefresh.addEventListener('click', () =>
+    {
+      loadSidebarWallpapers(currentSidebarSource);
+    });
+  }
+  
+  document.querySelectorAll('.sidebar-source-btn').forEach(btn =>
+  {
+    btn.addEventListener('click', () =>
+    {
+      const source = btn.dataset.source;
+      currentSidebarSource = source;
+      
+      document.querySelectorAll('.sidebar-source-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      const sidebarTitle = document.getElementById('sidebarTitle');
+      sidebarTitle.textContent = source === 'bing' ? '必应壁纸' : 'Wallhaven';
+      
+      loadSidebarWallpapers(source);
+    });
+  });
+  
+  document.addEventListener('keydown', (e) =>
+  {
+    if (e.key === 'Escape')
+    {
+      const sidebar = document.getElementById('wallpaperSidebar');
+      if (sidebar && sidebar.classList.contains('active'))
+      {
+        closeWallpaperSidebar();
+      }
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
