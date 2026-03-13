@@ -448,6 +448,30 @@ body {
 .image-upload {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.save-local-btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  background: #4caf50;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.save-local-btn:hover {
+  opacity: 0.9;
+}
+
+.save-local-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .upload-btn,

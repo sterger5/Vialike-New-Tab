@@ -22,7 +22,8 @@ const defaultSettings = {
     image: '',
     theme: 'light',
     blur: 0,
-    source: 'local'
+    source: 'local',
+    localImage: ''
   },
   advanced: {
     effect: 'transparent',
@@ -451,11 +452,61 @@ function setupEventListeners()
   const uploadBgBtn = document.getElementById('uploadBgBtn');
   const bgImageInput = document.getElementById('bgImage');
   const clearBgBtn = document.getElementById('clearBgBtn');
+  const saveLocalBtn = document.getElementById('saveLocalBtn');
 
   uploadBgBtn.addEventListener('click', () =>
   {
     bgImageInput.click();
   });
+
+  if (saveLocalBtn)
+  {
+    saveLocalBtn.addEventListener('click', async () =>
+    {
+      if (currentSettings.background.image)
+      {
+        try
+        {
+          const imageUrl = currentSettings.background.image;
+          let blob;
+          
+          if (imageUrl.startsWith('data:'))
+          {
+            const response = await fetch(imageUrl);
+            blob = await response.blob();
+          }
+          else
+          {
+            const response = await fetch(imageUrl);
+            blob = await response.blob();
+          }
+          
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          
+          const timestamp = new Date().toISOString().slice(0, 10);
+          a.download = `wallpaper_${timestamp}.jpg`;
+          
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          
+          showToast('壁纸已开始下载');
+        }
+        catch (error)
+        {
+          console.error('Download failed:', error);
+          showToast('下载失败，请重试');
+        }
+      }
+      else
+      {
+        showToast('当前没有壁纸可保存');
+      }
+    });
+  }
 
   bgImageInput.addEventListener('change', (e) =>
   {
@@ -466,8 +517,14 @@ function setupEventListeners()
       reader.onload = (event) =>
       {
         currentSettings.background.image = event.target.result;
+        currentSettings.background.localImage = event.target.result;
+        currentSettings.background.source = 'local';
         applySettings();
         saveSettings();
+        
+        document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('.source-btn[data-source="local"]').classList.add('active');
+        updateWallpaperSourceUI('local');
       };
       reader.readAsDataURL(file);
     }
@@ -476,6 +533,7 @@ function setupEventListeners()
   clearBgBtn.addEventListener('click', () =>
   {
     currentSettings.background.image = '';
+    currentSettings.background.localImage = '';
     bgImageInput.value = '';
     applySettings();
     saveSettings();
@@ -520,7 +578,14 @@ function setupEventListeners()
         document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentSettings.background.source = source;
+        
+        if (currentSettings.background.localImage)
+        {
+          currentSettings.background.image = currentSettings.background.localImage;
+        }
+        
         updateWallpaperSourceUI(source);
+        applySettings();
         saveSettings();
       }
     });
@@ -830,6 +895,42 @@ function setupEventListeners()
     }
     
     toast.textContent = `搜索引擎已切换为: ${engineName}`;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+    
+    setTimeout(() =>
+    {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(10px)';
+    }, 2000);
+  }
+
+  function showToast(message)
+  {
+    let toast = document.getElementById('generalToast');
+    if (!toast)
+    {
+      toast = document.createElement('div');
+      toast.id = 'generalToast';
+      toast.style.cssText = `
+        position: fixed;
+        bottom: 80px;
+        right: 20px;
+        background: var(--modal-bg);
+        color: var(--text-color);
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        z-index: 2000;
+        font-size: 14px;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: all 0.3s ease;
+      `;
+      document.body.appendChild(toast);
+    }
+    
+    toast.textContent = message;
     toast.style.opacity = '1';
     toast.style.transform = 'translateY(0)';
     
